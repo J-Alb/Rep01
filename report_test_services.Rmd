@@ -1,0 +1,356 @@
+---
+title: "Korea | Services  Data"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(extrafont)
+library(showtext)
+library(flexdashboard)
+library(lubridate)
+library(zoo)
+library(plotly)
+library(knitr)
+
+
+### Clean WD
+
+rm(list = ls())
+
+
+file = 'C:/Users/jedua/Downloads/korea_services.csv'
+
+setwd('C:/Users/jedua/OneDrive/Área de Trabalho/BlueLine/Korea/Services')
+
+destfile = ('C:/Users/jedua/OneDrive/Área de Trabalho/BlueLine/Korea/Services/report_test_services.Rmd')
+
+# Clean Data Frame
+
+data <- read.csv(file) %>% 
+  select(-c(X,Value)) %>%
+  dplyr::rename(SA = Seasonally.Adjusted.Index,
+                Sector = By.the.type.of.business,
+                Date = PERIOD) %>%
+  filter(SA!=0) %>%
+  select(Date,Sector,Volume,SA)
+ 
+  
+data$Date %<>% 
+  gsub(pattern = 'Month',replacement = '',.) %>%
+  gsub(pattern=' ',replacement = '',.) %>%
+  as.yearmon(.,'%Y.%m') %>% 
+  as.Date()
+
+### Create Data Frame with variations
+
+## Functions ##
+
+# Month Over Month, SA
+
+varmom <- function(x){
+  
+  y <- (x/lag(x,1) -1)*100
+  
+  return(y)
+  
+}
+
+# Quarter Over Quarter, SA
+
+varqoq <- function(x){
+  
+  x1 <- rollmean(x,k = 3,fill = NA,align = 'right')
+  x2 <- rollmean(lag(x,3),k=3,fill=NA,align = 'right')
+  
+  y <- (x1/x2 -1)*100
+  
+  return(y)
+}
+
+# Over Year, NSA
+
+varyoy <- function(x){
+  
+  y <- (x/lag(x,12)-1)*100
+  
+  return(y)
+}
+
+# Moving Average 3 months, NSA
+
+nsama3 <- function(x){
+  
+  y <- rollmean(x,k=3,fill=NA, align = 'right')
+  
+  return(y)
+  
+}
+
+# 12 months/12 months, NSA
+
+ac12 <- function(x){
+  
+  x1 <- rollmean(x,k=12,fill=NA, align='right')
+  x2 <- rollmean(lag(x,12),k=12,fill=NA,align = 'right')
+  
+  y <- (x1/x2 -1)*100
+  
+  return(y)
+}
+
+
+# Load Functions
+
+df.comp <- data %>% 
+  group_by(Sector) %>%
+  mutate(MoM = varmom(SA),
+         YoY = varyoy(Volume),
+         QoQ = varqoq(SA),
+         QoQsaar = ((1+QoQ/100)^4-1)*100,
+         AC12 = ac12(Volume)) %>%
+  
+  mutate(Index18 = (SA/SA[Date=='2018-01-01'])*100)
+  
+
+
+labels <- c('Total Index',
+            'Water supply; sewage, waste management, materials recovery',
+            'Wholesale and retail trade','Transportation and storage',
+            'Accommodation and food service activities','Information and communication',
+            'Financial and insurance activities','Real estate activities',
+            'Professional, scientific and technical activities',
+            'Business facilities management and business support services; rental and leasing activities',
+            'Education','Human health and social work activities',
+            'Arts, sports and recreation related services',
+            'Membership organizations, repair and other personal services')
+
+
+font_add_google('Montserrat','Montserrat')
+
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Chart 1
+
+```{r}
+
+showtext_auto()
+
+yaxis <- list(title = "MoM",
+             showgrid = F,
+             showline=T,
+             showticklabels = T,
+             linewidth=1)
+
+yaxis2 <- list(title = "saar",
+               showline=T,
+               linewidth=1,
+               overlaying='y',
+               side='right',
+               zeroline=F)
+
+xaxis <- list(title="",
+              showticklabels=T,
+              showline=T,
+              linewidth=1)
+
+t <- list(text = 'Korea | Services Production',
+          y=1.01,
+          x=0.1)
+
+font <- list(family='Montserrat',
+             size=18,
+             color='#1c3d5e')
+
+marker_style <- list(line=list(width=1,color='black'))
+
+
+legend <- list(y=0.1,
+               x=0.1,
+               family ='Montserrat',
+               bordercolor = 'grey',
+               borderwidth=1)
+
+m <- list(t=50,b=50,l=0,r=50)
+
+C1 <- 
+  df.comp %>% filter(Sector %in% labels) %>%
+  filter(Sector == 'Total Index' & Date >='2018-01-01') %>%
+  
+  plot_ly() %>%
+  add_bars(x = ~Date,y = ~MoM,name='MoM',marker=marker_style) %>%
+  add_trace(x=~Date,y=~QoQsaar,yaxis="y2",mode='lines+markers',
+            type='scatter',color=I('dark blue'),name = 'QoQsaar',marker=marker_style) %>%
+  
+  layout(title= t,
+         yaxis2 = yaxis2,
+         yaxis=yaxis,
+         xaxis=xaxis,
+         font=font,
+         legend=legend,
+         margin = m)
+
+C1
+
+
+
+
+
+```
+
+### Chart 2
+
+```{r}
+## Define theme
+
+yaxis <- list(title = "",
+             showgrid = F,
+             showline=T,
+             showticklabels = T,
+             linewidth=1)
+
+yaxis2 <- list(title = "",
+               showline=T,
+               linewidth=1,
+               overlaying='y',
+               side='right')
+
+xaxis <- list(title="",
+              showticklabels=T,
+              showline=T,
+              linewidth=1)
+
+t <- list(text = 'Korea | Services Production',
+          y=1.01,
+          x=0.1)
+
+font <- list(family='Montserrat',
+             size=18,
+             color='#1c3d5e')
+
+legend <- list(y=0.1,
+               x=0.1,
+               family ='Montserrat',
+               bordercolor = 'grey',
+               borderwidth=1)
+
+marker_style <- list(line=list(width=1,color='black'))
+
+m <- list(t=50,b=50,l=0,r=50)
+ 
+
+
+C2 <- df.comp %>% filter(Sector %in% labels) %>%
+  filter(Sector == 'Total Index' & Date >='2018-01-01') %>%
+  
+  plot_ly() %>%
+  add_bars(x = ~Date,y = ~YoY,name='YoY',marker=marker_style) %>%
+  add_trace(x=~Date,y=~Index18,yaxis="y2",mode='lines+markers',
+            type='scatter',color=I('dark blue'),name = 'SA',marker=marker_style) %>%
+  
+  layout(title= t,
+         yaxis2 = yaxis2,
+         yaxis=yaxis,
+         xaxis=xaxis,
+         font=font,
+         legend=legend,
+         margin = m)
+
+C2
+
+```
+Row
+-----------------------------------------------------------------------
+
+### Chart 3
+
+```{r}
+
+shortlab <- c('Accommodation & Food','Recreation','Business Mngmt & Support','Education',
+             'Financial Services','Health & Social Work','Information & Comms',
+             'Other Activities','Professional Services','Real State','Total Index',
+             'Logistics','Water Mngmt','Wholesale & Retail Sales')
+
+data <- df.comp %>% filter(Sector %in% labels) %>% arrange(Sector) %>%
+  ungroup()%>%
+  mutate(across(.cols = Sector,.fns = as.factor))
+
+levels(data$Sector) <- shortlab
+
+data <- data %>%
+  filter(Date >='2018-01-01' & !(Sector %in% c('Total Index','Other Activities'))) 
+  
+C3 <- 
+  data %>%
+  ggplot(aes(x=Date,y=Index18,colour=Sector))+
+  geom_line()+
+  theme_classic()+
+  theme(axis.line = element_line(size = 1,colour = 'black'),
+        axis.text = element_text(family = 'Montserrat'),
+        axis.title = element_blank(),
+        legend.title = element_blank())+
+  annotate(geom = 'text',
+           x = as.Date('2019-01-01'),
+           y = 70,
+           label='Seasonally Adjusted Index (2018=100)',size=3.5)+
+  scale_x_date(expand=c(0,1))
+
+### Plotly Params
+
+t <- list(text = 'Korea | Services Activities',
+          y=1.01,
+          x=0.1)
+
+font <- list(family='Montserrat',
+             size=18,
+             color='#1c3d5e')
+
+m <- list(t=50,b=50,l=0,r=10)
+
+legend <- list(family ='Montserrat',
+               font=list(size=10,family='Montserrat'))
+
+
+
+ggplotly(C3) %>% layout(title = t,
+                        font=font,
+                        legend=legend,
+                        margin=m)
+
+```
+
+### Chart 4
+
+```{r}
+
+options(width=10000,length=10)
+
+
+
+library(DT)
+
+
+tab1 <-
+  data %>% 
+  filter(Date == max(Date)) %>%
+  arrange(Date) %>%
+  mutate(across(c(Volume:QoQsaar),round,1),
+         across(AC12,.fns = round,1)) %>%
+  group_by(Date) %>%
+  rename(`12m/12m`=AC12) %>%
+  select(-c(Volume,SA,Index18))
+
+datatable(tab1,options=list(lengthMenu=c(7,14)),rownames = F) %>% 
+  formatDate(columns=1,
+             method = 'toLocaleDateString',
+             params=list('en-US',list(year='numeric',month='long'))) %>% 
+  formatStyle(columns = colnames(tab1),fontFamily='Montserrat')
+
+```
